@@ -1,36 +1,23 @@
 import cv2
+import numpy as np
 
-def resize_video(input_path, output_path, width=None, height=None, interpolation=cv2.INTER_LINEAR):
-    """
-    Resize a video while maintaining its aspect ratio.
-
-    :param input_path: Path to the input video file.
-    :param output_path: Path to save the resized video.
-    :param width: Desired width of the resized video. If None, height will be used to calculate width.
-    :param height: Desired height of the resized video. If None, width will be used to calculate height.
-    :param interpolation: Interpolation method used for resizing.
-    """
+def resize_video(input_path, output_path, width=None, height=None, interpolation=cv2.INTER_LINEAR, codec='mp4v'):
     cap = cv2.VideoCapture(input_path)
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID' for .avi
-    
     if not cap.isOpened():
         raise ValueError("Could not open the video file.")
 
-    # Get original dimensions
+    fourcc = cv2.VideoWriter_fourcc(*codec)
+    
     original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # Calculate new dimensions
     if width and not height:
-        aspect_ratio = original_height / original_width
-        height = int(width * aspect_ratio)
+        height = int(width * original_height / original_width)
     elif height and not width:
-        aspect_ratio = original_width / original_height
-        width = int(height * aspect_ratio)
+        width = int(height * original_width / original_height)
     elif not width and not height:
         width, height = original_width, original_height
 
-    # Set up the video writer
     out = cv2.VideoWriter(output_path, fourcc, cap.get(cv2.CAP_PROP_FPS), (width, height))
 
     while True:
@@ -38,6 +25,53 @@ def resize_video(input_path, output_path, width=None, height=None, interpolation
         if not ret:
             break
         resized_frame = cv2.resize(frame, (width, height), interpolation=interpolation)
+        out.write(resized_frame)
+
+    cap.release()
+    out.release()
+
+def get_video_duration(input_path):
+    cap = cv2.VideoCapture(input_path)
+    if not cap.isOpened():
+        raise ValueError("Could not open the video file.")
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration = frame_count / fps
+    cap.release()
+    return duration
+
+def resize_video_with_cuda(input_path, output_path, width=None, height=None, interpolation=cv2.INTER_LINEAR, codec='mp4v'):
+    if not cv2.cuda.getCudaEnabledDeviceCount():
+        raise RuntimeError("CUDA is not available. Cannot use GPU acceleration.")
+
+    cap = cv2.VideoCapture(input_path)
+    if not cap.isOpened():
+        raise ValueError("Could not open the video file.")
+
+    fourcc = cv2.VideoWriter_fourcc(*codec)
+    
+    original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    if width and not height:
+        height = int(width * original_height / original_width)
+    elif height and not width:
+        width = int(height * original_width / original_height)
+    elif not width and not height:
+        width, height = original_width, original_height
+
+    out = cv2.VideoWriter(output_path, fourcc, cap.get(cv2.CAP_PROP_FPS), (width, height))
+
+    gpu_stream = cv2.cuda_Stream()
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        gpu_frame = cv2.cuda_GpuMat(frame)
+        resized_gpu_frame = cv2.cuda.resize(gpu_frame, (width, height), interpolation=interpolation, stream=gpu_stream)
+        resized_frame = resized_gpu_frame.download()
         out.write(resized_frame)
 
     cap.release()
