@@ -1,0 +1,2 @@
+# Tooling used only by the CI lint gate (not needed at runtime).
+flake8>=6.1,<8
