@@ -1,0 +1,6 @@
+# Runtime dependencies.
+# numpy / opencv-python-headless pins come from the verified local install
+# (see CICD-AUDIT.md); Flask is a range until a version is verified on the host.
+Flask>=3.0,<4
+numpy==2.2.6
+opencv-python-headless==5.0.0.93
